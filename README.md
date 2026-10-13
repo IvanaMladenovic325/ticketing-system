@@ -7,4 +7,3 @@ Mikroservisni sistem za pregled događaja, rezervaciju i plaćanje karata.
 ```bash
 ./mvnw clean verify
 ```
-

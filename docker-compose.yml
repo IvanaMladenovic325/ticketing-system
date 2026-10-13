@@ -1,0 +1,38 @@
+services:
+  user-db:
+    image: postgres:17-alpine
+    container_name: user-db
+    environment:
+      POSTGRES_DB: user_db
+      POSTGRES_USER: ${USER_DB_USERNAME:?USER_DB_USERNAME is not set in .env}
+      POSTGRES_PASSWORD: ${USER_DB_PASSWORD:?USER_DB_PASSWORD is not set in .env}
+    ports:
+      - "5433:5432"
+    volumes:
+      - user-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  event-db:
+    image: postgres:17-alpine
+    container_name: event-db
+    environment:
+      POSTGRES_DB: event_db
+      POSTGRES_USER: ${EVENT_DB_USERNAME:?EVENT_DB_USERNAME is not set in .env}
+      POSTGRES_PASSWORD: ${EVENT_DB_PASSWORD:?EVENT_DB_PASSWORD is not set in .env}
+    ports:
+      - "5434:5432"
+    volumes:
+      - event-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  user-db-data:
+  event-db-data:

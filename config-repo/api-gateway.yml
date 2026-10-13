@@ -1,6 +1,21 @@
 server:
   port: 8080
 
+spring:
+  cloud:
+    gateway:
+      server:
+        webmvc:
+          routes:
+            - id: user-service
+              uri: lb://user-service
+              predicates:
+                - Path=/api/users/**
+            - id: event-service
+              uri: lb://event-service
+              predicates:
+                - Path=/api/events/**
+
 eureka:
   client:
     service-url:
