@@ -33,6 +33,24 @@ services:
       timeout: 5s
       retries: 10
 
+  payment-db:
+    image: postgres:17-alpine
+    container_name: payment-db
+    environment:
+      POSTGRES_DB: payment_db
+      POSTGRES_USER: ${PAYMENT_DB_USERNAME:?PAYMENT_DB_USERNAME is not set in .env}
+      POSTGRES_PASSWORD: ${PAYMENT_DB_PASSWORD:?PAYMENT_DB_PASSWORD is not set in .env}
+    ports:
+      - "5436:5432"
+    volumes:
+      - payment-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 volumes:
   user-db-data:
   event-db-data:
+  payment-db-data:

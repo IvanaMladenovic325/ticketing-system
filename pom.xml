@@ -26,6 +26,7 @@
         <module>api-gateway</module>
         <module>user-service</module>
         <module>event-service</module>
+        <module>payment-service</module>
     </modules>
 
     <dependencyManagement>
