@@ -1,0 +1,44 @@
+spring:
+  cloud:
+    config:
+      enabled: false
+    openfeign:
+      client:
+        config:
+          payment-service:
+            connect-timeout: 500
+            read-timeout: 500
+  jpa:
+    hibernate:
+      ddl-auto: validate
+
+eureka:
+  client:
+    enabled: false
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      payment:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 4
+        minimum-number-of-calls: 4
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 60s
+        record-exceptions:
+          - feign.FeignException$FeignServerException
+          - feign.RetryableException
+  retry:
+    instances:
+      payment:
+        max-attempts: 3
+        wait-duration: 10ms
+        retry-exceptions:
+          - feign.FeignException$FeignServerException
+          - feign.RetryableException
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus

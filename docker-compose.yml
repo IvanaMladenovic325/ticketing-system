@@ -33,6 +33,23 @@ services:
       timeout: 5s
       retries: 10
 
+  booking-db:
+    image: postgres:17-alpine
+    container_name: booking-db
+    environment:
+      POSTGRES_DB: booking_db
+      POSTGRES_USER: ${BOOKING_DB_USERNAME:?BOOKING_DB_USERNAME is not set in .env}
+      POSTGRES_PASSWORD: ${BOOKING_DB_PASSWORD:?BOOKING_DB_PASSWORD is not set in .env}
+    ports:
+      - "5435:5432"
+    volumes:
+      - booking-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   payment-db:
     image: postgres:17-alpine
     container_name: payment-db
@@ -53,4 +70,5 @@ services:
 volumes:
   user-db-data:
   event-db-data:
+  booking-db-data:
   payment-db-data:
