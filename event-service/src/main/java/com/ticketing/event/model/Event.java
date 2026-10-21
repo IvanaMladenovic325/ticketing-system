@@ -68,6 +68,18 @@ public class Event {
         this.availableSeats = newTotalSeats - soldSeats;
     }
 
+    public void reserveSeats(int numberOfTickets) {
+        if (numberOfTickets > availableSeats) {
+            throw new IllegalStateException("Cannot reserve " + numberOfTickets + " seats for event " + id
+                    + ", only " + availableSeats + " available");
+        }
+        this.availableSeats -= numberOfTickets;
+    }
+
+    public void releaseSeats(int numberOfTickets) {
+        this.availableSeats = Math.min(totalSeats, availableSeats + numberOfTickets);
+    }
+
     public Long getId() {
         return id;
     }

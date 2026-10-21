@@ -13,6 +13,7 @@ import com.ticketing.booking.exception.EventNotFoundException;
 import com.ticketing.booking.exception.InsufficientSeatsException;
 import com.ticketing.booking.exception.InvalidBookingStateException;
 import com.ticketing.booking.exception.UserNotFoundException;
+import com.ticketing.booking.messaging.BookingEventPublisher;
 import com.ticketing.booking.model.Booking;
 import com.ticketing.booking.model.BookingStatus;
 import com.ticketing.booking.repository.BookingRepository;
@@ -30,13 +31,15 @@ public class BookingService {
     private final UserClient userClient;
     private final EventClient eventClient;
     private final PaymentGateway paymentGateway;
+    private final BookingEventPublisher eventPublisher;
 
     public BookingService(BookingRepository bookingRepository, UserClient userClient, EventClient eventClient,
-                          PaymentGateway paymentGateway) {
+                          PaymentGateway paymentGateway, BookingEventPublisher eventPublisher) {
         this.bookingRepository = bookingRepository;
         this.userClient = userClient;
         this.eventClient = eventClient;
         this.paymentGateway = paymentGateway;
+        this.eventPublisher = eventPublisher;
     }
 
     public BookingResponse create(CreateBookingRequest request) {
@@ -66,7 +69,9 @@ public class BookingService {
             throw new InvalidBookingStateException(id, booking.getStatus(), "cancelled");
         }
         booking.setStatus(BookingStatus.CANCELLED);
-        return BookingResponse.from(bookingRepository.save(booking));
+        Booking cancelled = bookingRepository.save(booking);
+        eventPublisher.publishCancelled(cancelled);
+        return BookingResponse.from(cancelled);
     }
 
     @Transactional(readOnly = true)
@@ -84,16 +89,20 @@ public class BookingService {
     private Booking processPayment(Booking booking) {
         if (booking.getTotalPrice().signum() == 0) {
             booking.setStatus(BookingStatus.CONFIRMED);
-            return bookingRepository.save(booking);
+        } else {
+            PaymentOutcome outcome = paymentGateway.pay(booking.getId(), booking.getTotalPrice());
+            booking.setStatus(switch (outcome) {
+                case PAID -> BookingStatus.CONFIRMED;
+                case DECLINED -> BookingStatus.PAYMENT_FAILED;
+                case UNAVAILABLE -> BookingStatus.PENDING_PAYMENT;
+            });
         }
 
-        PaymentOutcome outcome = paymentGateway.pay(booking.getId(), booking.getTotalPrice());
-        booking.setStatus(switch (outcome) {
-            case PAID -> BookingStatus.CONFIRMED;
-            case DECLINED -> BookingStatus.PAYMENT_FAILED;
-            case UNAVAILABLE -> BookingStatus.PENDING_PAYMENT;
-        });
-        return bookingRepository.save(booking);
+        Booking saved = bookingRepository.save(booking);
+        if (saved.getStatus() == BookingStatus.CONFIRMED) {
+            eventPublisher.publishConfirmed(saved);
+        }
+        return saved;
     }
 
     private Booking getBooking(Long id) {

@@ -4,7 +4,10 @@ import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
 import com.ticketing.booking.dto.BookingResponse;
 import com.ticketing.booking.dto.CreateBookingRequest;
+import com.ticketing.booking.config.RabbitConfig;
 import com.ticketing.booking.exception.ApiError;
+import com.ticketing.booking.messaging.BookingCancelledEvent;
+import com.ticketing.booking.messaging.BookingConfirmedEvent;
 import com.ticketing.booking.model.BookingStatus;
 import com.ticketing.booking.repository.BookingRepository;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
@@ -12,6 +15,12 @@ import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.amqp.core.AmqpAdmin;
+import org.springframework.amqp.core.BindingBuilder;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.Queue;
+import org.springframework.amqp.core.TopicExchange;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -24,6 +33,8 @@ import org.springframework.test.web.servlet.client.RestTestClient;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
+import org.testcontainers.rabbitmq.RabbitMQContainer;
+import tools.jackson.databind.json.JsonMapper;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalToJson;
@@ -47,6 +58,12 @@ class BookingControllerIntegrationTest {
     @Container
     @ServiceConnection
     static PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:17-alpine");
+
+    @Container
+    @ServiceConnection
+    static RabbitMQContainer rabbit = new RabbitMQContainer("rabbitmq:4-management-alpine");
+
+    private static final String TEST_QUEUE = "booking-service-test.events";
 
     static WireMockServer wireMock = new WireMockServer(options().dynamicPort());
 
@@ -76,6 +93,18 @@ class BookingControllerIntegrationTest {
     @Autowired
     private CircuitBreakerRegistry circuitBreakerRegistry;
 
+    @Autowired
+    private AmqpAdmin amqpAdmin;
+
+    @Autowired
+    private RabbitTemplate rabbitTemplate;
+
+    @Autowired
+    private TopicExchange bookingExchange;
+
+    @Autowired
+    private JsonMapper jsonMapper;
+
     private RestTestClient client;
 
     @BeforeEach
@@ -83,6 +112,10 @@ class BookingControllerIntegrationTest {
         bookingRepository.deleteAll();
         wireMock.resetAll();
         circuitBreakerRegistry.circuitBreaker("payment").reset();
+        Queue testQueue = new Queue(TEST_QUEUE, true);
+        amqpAdmin.declareQueue(testQueue);
+        amqpAdmin.declareBinding(BindingBuilder.bind(testQueue).to(bookingExchange).with("booking.#"));
+        amqpAdmin.purgeQueue(TEST_QUEUE, false);
         client = RestTestClient.bindToServer(new JdkClientHttpRequestFactory())
                 .baseUrl("http://localhost:" + port)
                 .build();
@@ -99,6 +132,12 @@ class BookingControllerIntegrationTest {
 
         assertThat(booking.status()).isEqualTo(BookingStatus.CONFIRMED);
         assertThat(booking.totalPrice()).isEqualByComparingTo("3000.00");
+
+        BookingConfirmedEvent event = receiveEvent(RabbitConfig.BOOKING_CONFIRMED_KEY, BookingConfirmedEvent.class);
+        assertThat(event.bookingId()).isEqualTo(booking.id());
+        assertThat(event.eventId()).isEqualTo(2L);
+        assertThat(event.numberOfTickets()).isEqualTo(2);
+        assertThat(event.totalPrice()).isEqualByComparingTo("3000.00");
         wireMock.verify(1, postRequestedFor(urlEqualTo(PAYMENTS))
                 .withRequestBody(equalToJson("{\"bookingId\": " + booking.id() + ", \"amount\": 3000.00}")));
 
@@ -117,6 +156,7 @@ class BookingControllerIntegrationTest {
 
         assertThat(booking.status()).isEqualTo(BookingStatus.PENDING_PAYMENT);
         wireMock.verify(3, postRequestedFor(urlEqualTo(PAYMENTS)));
+        assertThat(rabbitTemplate.receive(TEST_QUEUE, 500)).isNull();
     }
 
     @Test
@@ -195,11 +235,17 @@ class BookingControllerIntegrationTest {
         wireMock.stubFor(post(PAYMENTS).willReturn(paymentCreated()));
         BookingResponse booking = createBooking(new CreateBookingRequest(1L, 2L, 1));
 
+        receiveEvent(RabbitConfig.BOOKING_CONFIRMED_KEY, BookingConfirmedEvent.class);
+
         client.put().uri("/api/bookings/{id}/cancel", booking.id())
                 .exchange()
                 .expectStatus().isOk()
                 .expectBody(BookingResponse.class)
                 .value(cancelled -> assertThat(cancelled.status()).isEqualTo(BookingStatus.CANCELLED));
+
+        BookingCancelledEvent event = receiveEvent(RabbitConfig.BOOKING_CANCELLED_KEY, BookingCancelledEvent.class);
+        assertThat(event.bookingId()).isEqualTo(booking.id());
+        assertThat(event.numberOfTickets()).isEqualTo(1);
 
         client.put().uri("/api/bookings/{id}/cancel", booking.id())
                 .exchange()
@@ -281,6 +327,14 @@ class BookingControllerIntegrationTest {
                 .expectBody(BookingResponse.class)
                 .returnResult()
                 .getResponseBody();
+    }
+
+    private <T> T receiveEvent(String expectedRoutingKey, Class<T> type) {
+        Message message = rabbitTemplate.receive(TEST_QUEUE, 5_000);
+        assertThat(message).as("message with routing key " + expectedRoutingKey).isNotNull();
+        assertThat(message.getMessageProperties().getReceivedRoutingKey()).isEqualTo(expectedRoutingKey);
+        assertThat(message.getMessageProperties().getContentType()).isEqualTo("application/json");
+        return jsonMapper.readValue(message.getBody(), type);
     }
 
     private static void stubUser(long id) {

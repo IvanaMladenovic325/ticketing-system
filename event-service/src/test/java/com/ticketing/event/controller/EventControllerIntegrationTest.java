@@ -1,5 +1,6 @@
 package com.ticketing.event.controller;
 
+import com.ticketing.event.AbstractIntegrationTest;
 import com.ticketing.event.dto.CreateEventRequest;
 import com.ticketing.event.dto.EventResponse;
 import com.ticketing.event.dto.UpdateEventRequest;
@@ -9,35 +10,18 @@ import com.ticketing.event.repository.EventRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
-import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.client.RestTestClient;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Testcontainers
-@TestPropertySource(properties = {
-        "spring.cloud.config.enabled=false",
-        "eureka.client.enabled=false",
-        "spring.jpa.hibernate.ddl-auto=validate"
-})
-class EventControllerIntegrationTest {
+class EventControllerIntegrationTest extends AbstractIntegrationTest {
 
     private static final LocalDateTime DATE_TIME = LocalDateTime.now().plusMonths(1).withNano(0);
-
-    @Container
-    @ServiceConnection
-    static PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:17-alpine");
 
     @LocalServerPort
     private int port;

@@ -14,6 +14,7 @@ import com.ticketing.booking.exception.EventNotFoundException;
 import com.ticketing.booking.exception.InsufficientSeatsException;
 import com.ticketing.booking.exception.InvalidBookingStateException;
 import com.ticketing.booking.exception.UserNotFoundException;
+import com.ticketing.booking.messaging.BookingEventPublisher;
 import com.ticketing.booking.model.Booking;
 import com.ticketing.booking.model.BookingStatus;
 import com.ticketing.booking.repository.BookingRepository;
@@ -37,6 +38,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -61,6 +63,9 @@ class BookingServiceTest {
 
     @Mock
     private PaymentGateway paymentGateway;
+
+    @Mock
+    private BookingEventPublisher eventPublisher;
 
     @InjectMocks
     private BookingService bookingService;
@@ -87,6 +92,7 @@ class BookingServiceTest {
         assertThat(response.id()).isEqualTo(10L);
         assertThat(response.status()).isEqualTo(BookingStatus.CONFIRMED);
         assertThat(response.totalPrice()).isEqualByComparingTo("4500.00");
+        verify(eventPublisher).publishConfirmed(argThat(booking -> booking.getId() == 10L));
     }
 
     @Test
@@ -98,6 +104,7 @@ class BookingServiceTest {
         BookingResponse response = bookingService.create(REQUEST);
 
         assertThat(response.status()).isEqualTo(BookingStatus.PENDING_PAYMENT);
+        verifyNoInteractions(eventPublisher);
     }
 
     @Test
@@ -109,6 +116,7 @@ class BookingServiceTest {
         BookingResponse response = bookingService.create(REQUEST);
 
         assertThat(response.status()).isEqualTo(BookingStatus.PAYMENT_FAILED);
+        verifyNoInteractions(eventPublisher);
     }
 
     @Test
@@ -120,6 +128,7 @@ class BookingServiceTest {
 
         assertThat(response.status()).isEqualTo(BookingStatus.CONFIRMED);
         verifyNoInteractions(paymentGateway);
+        verify(eventPublisher).publishConfirmed(any(Booking.class));
     }
 
     @Test
@@ -176,6 +185,7 @@ class BookingServiceTest {
         BookingResponse response = bookingService.pay(10L);
 
         assertThat(response.status()).isEqualTo(BookingStatus.CONFIRMED);
+        verify(eventPublisher).publishConfirmed(booking);
     }
 
     @Test
@@ -209,6 +219,7 @@ class BookingServiceTest {
         BookingResponse response = bookingService.cancel(10L);
 
         assertThat(response.status()).isEqualTo(BookingStatus.CANCELLED);
+        verify(eventPublisher).publishCancelled(any(Booking.class));
     }
 
     @Test
@@ -219,6 +230,8 @@ class BookingServiceTest {
 
         assertThatThrownBy(() -> bookingService.cancel(10L))
                 .isInstanceOf(InvalidBookingStateException.class);
+
+        verifyNoInteractions(eventPublisher);
     }
 
     @Test
