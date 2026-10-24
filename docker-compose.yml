@@ -1,3 +1,21 @@
+x-spring-service: &spring-service
+  deploy:
+    resources:
+      limits:
+        memory: 512M
+
+x-spring-env: &spring-env
+  CONFIG_SERVER_URL: http://config-server:8888
+  EUREKA_URL: http://discovery-server:8761/eureka/
+  EUREKA_INSTANCE_PREFERIPADDRESS: "true"
+  ZIPKIN_URL: http://zipkin:9411
+
+x-healthcheck: &healthcheck
+  interval: 10s
+  timeout: 5s
+  retries: 10
+  start_period: 60s
+
 services:
   user-db:
     image: postgres:17-alpine
@@ -107,6 +125,214 @@ services:
     ports:
       - "1025:1025"
       - "8025:8025"
+
+  zipkin:
+    image: openzipkin/zipkin:3
+    container_name: zipkin
+    ports:
+      - "9411:9411"
+
+  config-server:
+    <<: *spring-service
+    build:
+      context: .
+      dockerfile: config-server/Dockerfile
+    image: ticketing/config-server
+    container_name: config-server
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./config-repo:/app/config-repo:ro
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8888/actuator/health || exit 1"]
+
+  discovery-server:
+    <<: *spring-service
+    build:
+      context: .
+      dockerfile: discovery-server/Dockerfile
+    image: ticketing/discovery-server
+    container_name: discovery-server
+    environment:
+      <<: *spring-env
+    ports:
+      - "8761:8761"
+    depends_on:
+      config-server:
+        condition: service_healthy
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8761/actuator/health || exit 1"]
+
+  api-gateway:
+    <<: *spring-service
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    image: ticketing/api-gateway
+    container_name: api-gateway
+    environment:
+      <<: *spring-env
+    ports:
+      - "8080:8080"
+    depends_on:
+      config-server:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health || exit 1"]
+
+  user-service:
+    <<: *spring-service
+    build:
+      context: .
+      dockerfile: user-service/Dockerfile
+    image: ticketing/user-service
+    container_name: user-service
+    environment:
+      <<: *spring-env
+      USER_DB_HOST: user-db
+      USER_DB_PORT: 5432
+      USER_DB_USERNAME: ${USER_DB_USERNAME}
+      USER_DB_PASSWORD: ${USER_DB_PASSWORD}
+    ports:
+      - "8081:8081"
+    depends_on:
+      config-server:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+      user-db:
+        condition: service_healthy
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/actuator/health || exit 1"]
+
+  event-service:
+    <<: *spring-service
+    build:
+      context: .
+      dockerfile: event-service/Dockerfile
+    image: ticketing/event-service
+    container_name: event-service
+    environment:
+      <<: *spring-env
+      EVENT_DB_HOST: event-db
+      EVENT_DB_PORT: 5432
+      EVENT_DB_USERNAME: ${EVENT_DB_USERNAME}
+      EVENT_DB_PASSWORD: ${EVENT_DB_PASSWORD}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+    ports:
+      - "8082:8082"
+    depends_on:
+      config-server:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+      event-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8082/actuator/health || exit 1"]
+
+  payment-service:
+    <<: *spring-service
+    build:
+      context: .
+      dockerfile: payment-service/Dockerfile
+    image: ticketing/payment-service
+    container_name: payment-service
+    environment:
+      <<: *spring-env
+      PAYMENT_DB_HOST: payment-db
+      PAYMENT_DB_PORT: 5432
+      PAYMENT_DB_USERNAME: ${PAYMENT_DB_USERNAME}
+      PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD}
+    ports:
+      - "8084:8084"
+    depends_on:
+      config-server:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+      payment-db:
+        condition: service_healthy
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8084/actuator/health || exit 1"]
+
+  booking-service:
+    <<: *spring-service
+    build:
+      context: .
+      dockerfile: booking-service/Dockerfile
+    image: ticketing/booking-service
+    container_name: booking-service
+    environment:
+      <<: *spring-env
+      BOOKING_DB_HOST: booking-db
+      BOOKING_DB_PORT: 5432
+      BOOKING_DB_USERNAME: ${BOOKING_DB_USERNAME}
+      BOOKING_DB_PASSWORD: ${BOOKING_DB_PASSWORD}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+    ports:
+      - "8083:8083"
+    depends_on:
+      config-server:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+      booking-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8083/actuator/health || exit 1"]
+
+  notification-service:
+    <<: *spring-service
+    build:
+      context: .
+      dockerfile: notification-service/Dockerfile
+    image: ticketing/notification-service
+    container_name: notification-service
+    environment:
+      <<: *spring-env
+      NOTIFICATION_DB_HOST: notification-db
+      NOTIFICATION_DB_PORT: 5432
+      NOTIFICATION_DB_USERNAME: ${NOTIFICATION_DB_USERNAME}
+      NOTIFICATION_DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      MAIL_HOST: mailpit
+      MAIL_PORT: 1025
+    ports:
+      - "8085:8085"
+    depends_on:
+      config-server:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+      notification-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8085/actuator/health || exit 1"]
 
 volumes:
   user-db-data:

@@ -11,6 +11,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @TestPropertySource(properties = {
         "spring.cloud.config.enabled=false",
+        "management.tracing.export.zipkin.enabled=false",
         "eureka.client.enabled=false"
 })
 class ApiGatewayApplicationTests {

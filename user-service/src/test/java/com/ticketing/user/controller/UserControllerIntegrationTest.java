@@ -19,14 +19,11 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * Ceo tok kroz HTTP -> controller -> service -> JPA -> prava PostgreSQL baza u Docker kontejneru.
- * Flyway migracije se izvršavaju nad tom bazom, a ddl-auto=validate proverava da se poklapaju sa entitetima.
- */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Testcontainers
 @TestPropertySource(properties = {
         "spring.cloud.config.enabled=false",
+        "management.tracing.export.zipkin.enabled=false",
         "eureka.client.enabled=false",
         "spring.jpa.hibernate.ddl-auto=validate"
 })

@@ -16,6 +16,7 @@ import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @TestPropertySource(properties = {
         "spring.cloud.config.enabled=false",
+        "management.tracing.export.zipkin.enabled=false",
         "eureka.client.enabled=false",
         "spring.jpa.hibernate.ddl-auto=validate",
         "spring.rabbitmq.listener.simple.retry.enabled=true",

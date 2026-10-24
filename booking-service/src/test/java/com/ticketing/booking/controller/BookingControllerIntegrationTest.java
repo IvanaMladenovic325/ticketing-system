@@ -36,6 +36,8 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.rabbitmq.RabbitMQContainer;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.util.List;
+
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalToJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
@@ -146,6 +148,24 @@ class BookingControllerIntegrationTest {
                 .expectStatus().isOk()
                 .expectBody(BookingResponse.class)
                 .value(found -> assertThat(found.status()).isEqualTo(BookingStatus.CONFIRMED));
+    }
+
+    @Test
+    void traceContextIsPropagatedThroughFeignCallsAndRabbitMessage() {
+        wireMock.stubFor(post(PAYMENTS).willReturn(paymentCreated()));
+
+        createBooking(new CreateBookingRequest(1L, 2L, 1));
+
+        List<String> traceIds = wireMock.getAllServeEvents().stream()
+                .map(served -> served.getRequest().getHeader("traceparent"))
+                .map(BookingControllerIntegrationTest::traceIdOf)
+                .toList();
+        assertThat(traceIds).hasSize(3).containsOnly(traceIds.getFirst());
+
+        Message message = rabbitTemplate.receive(TEST_QUEUE, 5_000);
+        assertThat(message).isNotNull();
+        String messageTraceparent = message.getMessageProperties().getHeader("traceparent");
+        assertThat(traceIdOf(messageTraceparent)).isEqualTo(traceIds.getFirst());
     }
 
     @Test
@@ -335,6 +355,11 @@ class BookingControllerIntegrationTest {
         assertThat(message.getMessageProperties().getReceivedRoutingKey()).isEqualTo(expectedRoutingKey);
         assertThat(message.getMessageProperties().getContentType()).isEqualTo("application/json");
         return jsonMapper.readValue(message.getBody(), type);
+    }
+
+    private static String traceIdOf(String traceparent) {
+        assertThat(traceparent).matches("00-[0-9a-f]{32}-[0-9a-f]{16}-0[01]");
+        return traceparent.split("-")[1];
     }
 
     private static void stubUser(long id) {

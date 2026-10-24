@@ -1,4 +1,7 @@
 spring:
+  rabbitmq:
+    template:
+      observation-enabled: true
   cloud:
     config:
       enabled: false
@@ -38,6 +41,12 @@ resilience4j:
           - feign.RetryableException
 
 management:
+  tracing:
+    sampling:
+      probability: 1.0
+    export:
+      zipkin:
+        enabled: false
   endpoints:
     web:
       exposure:

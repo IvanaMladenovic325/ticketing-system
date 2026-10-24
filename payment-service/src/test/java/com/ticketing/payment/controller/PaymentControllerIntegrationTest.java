@@ -28,6 +28,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Testcontainers
 @TestPropertySource(properties = {
         "spring.cloud.config.enabled=false",
+        "management.tracing.export.zipkin.enabled=false",
         "eureka.client.enabled=false",
         "spring.jpa.hibernate.ddl-auto=validate"
 })
