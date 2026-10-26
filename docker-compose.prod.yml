@@ -1,0 +1,92 @@
+x-prod-app: &prod-app
+  build: !reset null
+  pull_policy: always
+  restart: unless-stopped
+  ports: !reset []
+
+x-prod-infra: &prod-infra
+  restart: unless-stopped
+  ports: !reset []
+
+services:
+  user-db:
+    <<: *prod-infra
+  event-db:
+    <<: *prod-infra
+  booking-db:
+    <<: *prod-infra
+  payment-db:
+    <<: *prod-infra
+  notification-db:
+    <<: *prod-infra
+  rabbitmq:
+    <<: *prod-infra
+  zipkin:
+    <<: *prod-infra
+
+  mailpit:
+    profiles: ["mailpit"]
+
+  config-server:
+    <<: *prod-app
+    image: ghcr.io/${GHCR_OWNER:-ivanamladenovic325}/config-server:${IMAGE_TAG:-latest}
+
+  discovery-server:
+    <<: *prod-app
+    image: ghcr.io/${GHCR_OWNER:-ivanamladenovic325}/discovery-server:${IMAGE_TAG:-latest}
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+
+  api-gateway:
+    <<: *prod-app
+    image: ghcr.io/${GHCR_OWNER:-ivanamladenovic325}/api-gateway:${IMAGE_TAG:-latest}
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+    ports: !override
+      - "8080:8080"
+
+  user-service:
+    <<: *prod-app
+    image: ghcr.io/${GHCR_OWNER:-ivanamladenovic325}/user-service:${IMAGE_TAG:-latest}
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+
+  event-service:
+    <<: *prod-app
+    image: ghcr.io/${GHCR_OWNER:-ivanamladenovic325}/event-service:${IMAGE_TAG:-latest}
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+
+  payment-service:
+    <<: *prod-app
+    image: ghcr.io/${GHCR_OWNER:-ivanamladenovic325}/payment-service:${IMAGE_TAG:-latest}
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+
+  booking-service:
+    <<: *prod-app
+    image: ghcr.io/${GHCR_OWNER:-ivanamladenovic325}/booking-service:${IMAGE_TAG:-latest}
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+
+  notification-service:
+    <<: *prod-app
+    image: ghcr.io/${GHCR_OWNER:-ivanamladenovic325}/notification-service:${IMAGE_TAG:-latest}
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      MAIL_HOST: ${MAIL_HOST:?MAIL_HOST is not set in .env}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:?MAIL_FROM is not set in .env}
+      MAIL_SMTP_AUTH: ${MAIL_SMTP_AUTH:-true}
+      MAIL_SMTP_STARTTLS: ${MAIL_SMTP_STARTTLS:-true}
+    depends_on: !override
+      config-server:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+      notification-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy

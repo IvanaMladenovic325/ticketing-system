@@ -5,6 +5,7 @@ x-spring-service: &spring-service
         memory: 512M
 
 x-spring-env: &spring-env
+  SPRING_PROFILES_ACTIVE: dev
   CONFIG_SERVER_URL: http://config-server:8888
   EUREKA_URL: http://discovery-server:8761/eureka/
   EUREKA_INSTANCE_PREFERIPADDRESS: "true"

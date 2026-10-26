@@ -1,0 +1,12 @@
+management:
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:0.1}
+  endpoint:
+    health:
+      show-details: never
+
+server:
+  error:
+    include-stacktrace: never
+    include-message: never
