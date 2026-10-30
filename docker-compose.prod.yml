@@ -23,6 +23,21 @@ services:
     <<: *prod-infra
   zipkin:
     <<: *prod-infra
+  prometheus:
+    <<: *prod-infra
+  grafana:
+    <<: *prod-infra
+    ports: !override
+      - "3000:3000"
+    environment:
+      GF_SMTP_HOST: ${MAIL_HOST:?MAIL_HOST is not set in .env}:${MAIL_PORT:-587}
+      GF_SMTP_USER: ${MAIL_USERNAME:-}
+      GF_SMTP_PASSWORD: ${MAIL_PASSWORD:-}
+      GF_SMTP_FROM_ADDRESS: ${MAIL_FROM:?MAIL_FROM is not set in .env}
+      ALERT_EMAIL_TO: ${ALERT_EMAIL_TO:?ALERT_EMAIL_TO is not set in .env}
+    depends_on: !override
+      prometheus:
+        condition: service_healthy
 
   mailpit:
     profiles: ["mailpit"]

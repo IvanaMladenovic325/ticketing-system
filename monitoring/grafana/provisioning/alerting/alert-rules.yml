@@ -1,0 +1,109 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: ticketing-alerts
+    folder: Ticketing
+    interval: 10s
+    rules:
+      - uid: circuit-breaker-open
+        title: Circuit breaker OPEN
+        condition: C
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Circuit breaker {{ index .Labels "name" }} je u stanju OPEN'
+          description: >-
+            booking-service više ne poziva payment-service (circuit breaker "{{ index .Labels "name" }}" je OPEN).
+            Nove rezervacije se čuvaju u statusu PENDING_PAYMENT dok se payment-service ne oporavi.
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange:
+              from: 60
+              to: 0
+            model:
+              refId: A
+              expr: max by (name) (resilience4j_circuitbreaker_state{state="open"})
+              instant: true
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+
+      - uid: service-down
+        title: Servis nedostupan
+        condition: C
+        for: 30s
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Servis {{ index .Labels "instance" }} je nedostupan'
+          description: >-
+            Prometheus više od 30 s ne može da pročita /actuator/prometheus sa {{ index .Labels "instance" }}.
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange:
+              from: 60
+              to: 0
+            model:
+              refId: A
+              expr: up{job=~"infrastructure|business-services"}
+              instant: true
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: lt
+                    params: [1]
+
+      - uid: high-5xx-rate
+        title: Visok procenat 5xx grešaka
+        condition: C
+        for: 1m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Više od 5% odgovora servisa {{ index .Labels "application" }} su 5xx greške'
+          description: >-
+            Udeo 5xx odgovora u poslednjem minutu je iznad 5% najmanje 1 minut.
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange:
+              from: 120
+              to: 0
+            model:
+              refId: A
+              expr: >-
+                sum by (application) (rate(http_server_requests_seconds_count{status=~"5..", uri!~"/actuator.*"}[1m]))
+                / sum by (application) (rate(http_server_requests_seconds_count{uri!~"/actuator.*"}[1m]))
+              instant: true
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0.05]

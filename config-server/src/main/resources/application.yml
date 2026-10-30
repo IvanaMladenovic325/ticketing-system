@@ -13,6 +13,9 @@ spring:
           search-locations: file:./config-repo, file:../config-repo
 
 management:
+  metrics:
+    tags:
+      application: ${spring.application.name}
   endpoints:
     web:
       exposure:
